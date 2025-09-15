@@ -1,0 +1,128 @@
+services:
+  mariadb:
+    image: mariadb
+    build: ./requirements/mariadb
+    pull_policy: never
+    restart: always
+    env_file: .env
+    volumes:
+      - /home/xroca-pe/data/mariadb:/var/lib/mysql
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -uroot -p\"$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  wordpress:
+    image: wordpress
+    build: ./requirements/wordpress
+    pull_policy: never
+    restart: always
+    env_file: .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - /home/xroca-pe/data/wordpress:/var/www/wordpress
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "ss -lnt | grep -q ':9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  adminer:
+    image: adminer
+    build: ./requirements/bonus/adminer
+    pull_policy: never
+    restart: always
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "ss -lnt | grep -q ':9001'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  nginx:
+    image: nginx
+    build: ./requirements/nginx
+    pull_policy: never
+    restart: always
+    env_file: .env
+    depends_on:
+      wordpress:
+        condition: service_healthy
+      adminer:
+        condition: service_healthy
+    ports:
+      - "443:443"
+    volumes:
+      - /home/xroca-pe/data/wordpress:/var/www/wordpress:ro
+      - /home/xroca-pe/data/nginx/certs:/etc/ssl/certs
+      - /home/xroca-pe/data/nginx/private:/etc/ssl/private
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kfsS https://localhost/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis
+    build: ./requirements/bonus/redis
+    pull_policy: never
+    restart: always
+    networks: [backend]
+    volumes:
+      - /home/xroca-pe/data/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -h 127.0.0.1 ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backup:
+    image: backup
+    build: ./requirements/bonus/backup
+    pull_policy: never
+    restart: always
+    env_file: .env
+    environment:
+      TZ: Europe/Madrid 
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks: [backend]
+    volumes:
+      - /home/xroca-pe/data/wordpress:/data/wordpress:ro
+      - /home/xroca-pe/data/backups:/backups
+
+  ftp:
+    image: ftp
+    build: ./requirements/bonus/ftp
+    pull_policy: never
+    restart: always
+    env_file: .env
+    networks: [backend]
+    volumes:
+      - /home/xroca-pe/data/ftp:/home/${FTP_USER}
+    ports:
+      - "21:21"
+      - "21000-21010:21000-21010"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 21"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  backend:
+    driver: bridge
+
