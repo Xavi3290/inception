@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f srcs/docker-compose.yml
 
-.PHONY: all build up down ps logs fclean re restart prepare nginx-test
+.PHONY: all build up down ps logs fclean re restart prepare nginx-test backup-run backup-list 
 
 all: build up
 
